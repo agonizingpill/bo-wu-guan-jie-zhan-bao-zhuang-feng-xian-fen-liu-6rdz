@@ -9,7 +9,8 @@ from redis.exceptions import RedisError
 from .loans import change_status, lock_loan
 from .schemas import LoanStatus
 from .scoring import score
-from .storage import QUEUE, audit, connection, initialize, queue
+from .storage import QUEUE, THRESHOLD_QUEUE, audit, connection, initialize, queue
+from .thresholds import current_profile, evaluate_trial
 
 HEARTBEAT = Path('/tmp/museum-heartbeat')
 
@@ -25,7 +26,8 @@ def process(case_id):
         if case['status'] != 'queued':
             return
         try:
-            probability, risk, evidence = score(case['input_snapshot'])
+            pinned = case['thresholds'] or current_profile(db)['thresholds']
+            probability, risk, evidence = score(case['input_snapshot'], pinned)
         except Exception as exc:
             logging.exception('Model failed to score case %s', case_id)
             db.execute("UPDATE triage_case SET status='failed',error=%s,attempts=attempts+1 WHERE id=%s",
@@ -43,12 +45,36 @@ def process(case_id):
         print(f'case={case_id} loan={loan_id} risk={risk} probability={probability:.6f}', flush=True)
 
 
+def process_trial(trial_id):
+    with connection() as db:
+        trial = db.execute('SELECT * FROM threshold_trial WHERE id=%s FOR UPDATE', (trial_id,)).fetchone()
+        if not trial or trial['status'] not in ('running', 'failed'):
+            return
+        try:
+            evaluate_trial(db, trial)
+        except Exception as exc:
+            logging.exception('Threshold trial %s failed', trial_id)
+            db.execute("UPDATE threshold_trial SET status='failed',error=%s WHERE id=%s",
+                       ('阈值试算失败。请用同一批留出样本重试。', trial_id))
+            audit(db, None, 'worker', 'threshold_trial_failed', trial_id=trial_id,
+                  error_type=type(exc).__name__)
+            return
+        print(f'trial={trial_id} eligible={trial_result(db, trial_id)}', flush=True)
+
+
+def trial_result(db, trial_id):
+    return db.execute('SELECT eligible FROM threshold_trial WHERE id=%s', (trial_id,)).fetchone()['eligible']
+
+
 def recover_queue(redis):
     # PostgreSQL keeps the pending intent if a producer or worker exits before completion.
     with connection() as db:
         pending = db.execute("SELECT id FROM triage_case WHERE status='queued' ORDER BY id LIMIT 100").fetchall()
+        trials = db.execute("SELECT id FROM threshold_trial WHERE status='running' ORDER BY id LIMIT 20").fetchall()
     if pending:
         redis.lpush(QUEUE, *(row['id'] for row in pending))
+    if trials:
+        redis.lpush(THRESHOLD_QUEUE, *(row['id'] for row in trials))
 
 
 def main():
@@ -56,10 +82,16 @@ def main():
     with queue() as redis:
         while True:
             try:
-                message = redis.brpop(QUEUE, timeout=2)
+                worked = False
+                message = redis.brpop(QUEUE, timeout=1)
                 if message:
+                    worked = True
                     process(int(message[1]))
-                else:
+                message = redis.brpop(THRESHOLD_QUEUE, timeout=1)
+                if message:
+                    worked = True
+                    process_trial(int(message[1]))
+                if not worked:
                     recover_queue(redis)
                 HEARTBEAT.touch()
             except (DatabaseError, RedisError, ValueError):

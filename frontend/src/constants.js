@@ -23,4 +23,6 @@ export const auditActions = {
   triage_queued: '进入分流队列', triage_retried: '重试风险分流', triage_scored: '模型判定已归档',
   triage_failed: '分流计算失败', unpack_witnessed: '开箱见证签署', downgrade_sample_required: '主管改判，转抽检',
   unpack_held: '主管暂停运输', unpack_reopened: '主管重开复核', sample_mismatch: '抽检封签不符', sample_cleared: '抽检通过',
+  threshold_trial_queued: '提交阈值试算', threshold_trial_resumed: '阈值试算续跑',
+  threshold_trial_completed: '阈值试算完成', threshold_trial_failed: '阈值试算失败', thresholds_published: '发布阈值',
 };

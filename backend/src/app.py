@@ -2,10 +2,10 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from . import loans, reviews, transit, triage
+from . import loans, reviews, thresholds, transit, triage
 from .middleware import application_errors, request_history
 from .schemas import (CrateInspection, GallerySetup, LoanIntake, Login, ReopenReview, ReviewDecision,
-                      Role, SampleObservation, StaffMember, TransitReservation, Witness)
+                      Role, SampleObservation, StaffMember, ThresholdProposal, TransitReservation, Witness)
 from .security import issue_token, require, signed_in, verify_password
 from .storage import audit, connection, queue
 
@@ -130,3 +130,30 @@ def inspect_sample(loan_id: int, data: SampleObservation, staff=Depends(operator
 def reopen_review(loan_id: int, data: ReopenReview, staff=Depends(supervisor)):
     with connection() as db:
         return reviews.reopen(db, loan_id, data, staff.username)
+
+
+@app.get('/thresholds')
+def threshold_overview(staff=Depends(signed_in)):
+    with connection() as db:
+        return thresholds.summarize(db)
+
+
+@app.get('/thresholds/trials/{trial_id}')
+def threshold_trial(trial_id: int, staff=Depends(signed_in)):
+    with connection() as db:
+        return thresholds.progress(db, trial_id)
+
+
+@app.post('/thresholds/trials', status_code=202)
+def start_threshold_trial(data: ThresholdProposal, staff=Depends(supervisor)):
+    with connection() as db:
+        trial = thresholds.start(db, data.model_dump(), staff.username)
+    if trial['status'] in ('running', 'failed'):
+        thresholds.notify_worker(trial['id'])
+    return trial
+
+
+@app.post('/thresholds/trials/{trial_id}/publish')
+def publish_thresholds(trial_id: int, staff=Depends(supervisor)):
+    with connection() as db:
+        return thresholds.publish(db, trial_id, staff.username)

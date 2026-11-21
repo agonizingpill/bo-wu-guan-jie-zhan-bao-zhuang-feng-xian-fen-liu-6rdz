@@ -36,9 +36,10 @@ export function activity(history) {
   }).join('')}</ol>`;
 }
 
-export function field(label, name, {type = 'text', value = '', min, max, required = true, placeholder = '', readonly = false} = {}) {
+export function field(label, name, {type = 'text', value = '', min, max, step, required = true, placeholder = '', readonly = false} = {}) {
   return `<label>${e(label)}<input name="${e(name)}" type="${type}" value="${e(value)}" placeholder="${e(placeholder)}"
     ${min !== undefined ? `min="${min}"` : ''} ${max !== undefined ? `max="${max}"` : ''}
+    ${step !== undefined ? `step="${step}"` : ''}
     ${required ? 'required' : ''} ${readonly ? 'readonly' : ''}></label>`;
 }
 

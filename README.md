@@ -15,7 +15,7 @@
 | 岗位 | 账号 | 页面和权限 |
 | --- | --- | --- |
 | 借展经办 | `operator` | 登记借展、补录包装与封签、排运输窗口、提交分流、签署开箱见证、抽检、派车 |
-| 文保主管 | `supervisor` | 登记展厅布置，签署改判或暂缓，整改后重开复核。可调阅其余档案 |
+| 文保主管 | `supervisor` | 登记展厅布置，签署改判或暂缓，整改后重开复核，试算并发布分流阈值。可调阅其余档案 |
 | 展务阅览 | `viewer` | 只读调阅借展、排程、评分和复核档案 |
 
 三个演示账号使用密码 `MuseumDemo!26`。登录页的演示岗位按钮会代填相应凭据。
@@ -68,7 +68,10 @@ docker compose exec -T backend python -m scripts.seed_demo
 
 - 输入为材质、包装结构、路线类别、最高相对湿度和转运次数。检查保存后，经办可提交分流，形成输入快照。结果入档后，只有封签可补录，通过抽检后的封签也会冻结。
 - 三个类别用平滑目标编码。类别样本数为 `n` 时，编码为 `(该类别正例数 + 12 × 训练正例率) / (n + 12)`。训练行按 5 折交叉拟合，湿度和转运经标准化后，与编码一起输入 L2 LogisticRegression（`C=1.0`）。
-- 用种子 `2611` 生成 960 条合成检查，分层留出 25%。模型概率达到 `0.58` 生成一张开箱复核单。留出集 ROC AUC、Brier 分数、版本、参数、样本和输入 SHA-256、编码值随结果写库。概率只代表当前演示模型的分流判断。
+- 用种子 `2611` 生成 960 条合成检查，分层留出 25%。模型概率达到当前阈值生成一张开箱复核单。留出集 ROC AUC、Brier 分数、版本、参数、样本和输入 SHA-256、编码值随结果写库。概率只代表当前演示模型的分流判断。
+- 阈值按材质分别配置。主管可在风险分流页试算一组新阈值：系统固定沿用同一批 25% 留出样本，把现行阈值和新阈值并排比较各材质的开箱数与漏检数。只有总开箱数不增、各材质漏检都不增、且至少一类材质漏检减少时才判为可发布。
+- 试算在后台队列执行。中断或失败后重新提交同一组阈值会续跑原试算记录并复用原样本，不重复建档；现行阈值在试算后变化时，旧的试算不能发布，须按当前阈值重算。
+- 发布一次写入新的阈值配置。发布后新入队的风险分流沿用发布时的阈值，已排队批次重试仍使用入队时钉住的阈值，不会因发布而改写。
 - PostgreSQL 保留 `queued` 状态。Redis 通知丢失时，worker 会重新推送数据库中待算的任务。计算失败保留记录并允许同一 case 重试。
 - 派车同时要求封签存在、运输窗口已确认且借展已放行。同一展厅或同一车辆的有效窗口相互排斥。高风险由经办见证、主管签字，改判低风险须留理由并抽检封签。封签不符保留失败记录，仍需重新核验。
 
@@ -79,6 +82,7 @@ docker compose exec -T backend python -m scripts.seed_demo
 | 岗位 | `migrations/001_archive.sql`、`schemas.py`、`security.py`、`app.py`、`scripts/seed_demo.py` | `constants.js`、`app.js` 和四个 `pages/` 模块 |
 | 借展状态 | SQL 约束、`schemas.py`、`loans.py`、`transit.py`、`triage.py`、`reviews.py`、`worker.py`、seed | `constants.js`、`components.js`、`pages/archive.js`、`pages/transit.js` |
 | 开箱状态 | SQL 约束、`schemas.py`、`reviews.py`、`loans.py`、`worker.py`、seed | `constants.js`、`pages/review.js`、`pages/archive.js` |
-| 材质、包装、路线 | SQL 约束、`schemas.py`、`scoring.py`、seed | `constants.js`、`pages/archive.js`、`pages/triage.js` |
+| 材质、包装、路线 | SQL 约束、`schemas.py`、`scoring.py`、`thresholds.py`、seed | `constants.js`、`pages/archive.js`、`pages/triage.js`、`pages/thresholds.js` |
+| 阈值试算状态 | `migrations/002_thresholds.sql`、`thresholds.py`、`worker.py` | `pages/thresholds.js` |
 
 许可证见 [MIT License](LICENSE)。

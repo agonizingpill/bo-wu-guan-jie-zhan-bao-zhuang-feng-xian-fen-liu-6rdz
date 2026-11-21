@@ -6,6 +6,7 @@ from psycopg.types.json import Jsonb
 from src.scoring import score
 from src.security import hash_password
 from src.storage import audit, connection, initialize
+from src.thresholds import current_profile
 
 ACCOUNTS = (('operator', '林遥', 'operator'), ('supervisor', '周岚', 'supervisor'), ('viewer', '程雨', 'viewer'))
 PASSWORD = 'MuseumDemo!26'
@@ -66,11 +67,14 @@ def seed():
             if is_blocked:
                 continue
             snapshot = dict(material=material, packing=packing, route_type=route, max_rh=rh, transfers=transfers)
-            probability, risk, evidence = score(snapshot)
+            profile = current_profile(db)
+            probability, risk, evidence = score(snapshot, profile['thresholds'])
             assert risk == ('high' if is_sample else 'low'), (accession, probability)
-            case_id = db.execute('''INSERT INTO triage_case (loan_id,status,input_snapshot,probability,risk,evidence,attempts,requested_by,computed_at)
-                          VALUES (%s,'scored',%s,%s,%s,%s,1,'operator',now()) RETURNING id''',
-                                 (loan_id, Jsonb(snapshot), probability, risk, Jsonb(evidence))).fetchone()['id']
+            case_id = db.execute('''INSERT INTO triage_case (loan_id,status,input_snapshot,probability,risk,evidence,
+                          thresholds,attempts,requested_by,computed_at)
+                          VALUES (%s,'scored',%s,%s,%s,%s,%s,1,'operator',now()) RETURNING id''',
+                                 (loan_id, Jsonb(snapshot), probability, risk, Jsonb(evidence),
+                                  Jsonb(profile['thresholds']))).fetchone()['id']
             audit(db, loan_id, 'worker', 'triage_scored', case_id=case_id, risk=risk, probability=probability)
             if is_sample:
                 witness = '两侧内衬贴合，器口与肩部无新裂纹。'

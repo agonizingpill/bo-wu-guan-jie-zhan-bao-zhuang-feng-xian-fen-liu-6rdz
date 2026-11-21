@@ -58,14 +58,19 @@ async function render() {
   if (!store.staff) { loginPage(); return; }
   const {page, id} = currentRoute();
   try {
-    const [loans, schedule] = await Promise.all([authed('/loans'), page === 'transit' ? authed('/schedule') : []]);
+    const [loans, schedule, thresholds] = await Promise.all([
+      authed('/loans'),
+      page === 'transit' ? authed('/schedule') : [],
+      page === 'triage' ? authed('/thresholds') : null,
+    ]);
     if (ticket !== generation) return;
     const selected = loans.find((item) => item.id === id) ?? loans.find((item) => item.review) ?? loans[0];
     const record = selected ? await authed(`/loans/${selected.id}`) : null;
     if (ticket !== generation) return;
-    Object.assign(store, {loans, record, schedule});
+    Object.assign(store, {loans, record, schedule, thresholds});
     shell(page, renderers[page](store));
-    if (record?.triage?.status === 'queued' && page === 'triage') poll = setTimeout(render, 1600);
+    const trialRunning = thresholds?.trial?.status === 'running';
+    if ((record?.triage?.status === 'queued' || trialRunning) && page === 'triage') poll = setTimeout(render, 1600);
   } catch (err) {
     if (ticket !== generation) return;
     if (err.status === 401) { saveSession(null); loginPage(); tell(err.message, true); return; }
@@ -87,11 +92,14 @@ function target(action, fields) {
       {...fields, begins_at: fromLocal(fields.begins_at), ends_at: fromLocal(fields.ends_at)}];
   }
   if (action === 'triage') return [`${base}/triage`];
+  if (action === 'thresholds') return ['/thresholds/trials', {
+    porcelain: Number(fields.porcelain), paper: Number(fields.paper), bronze: Number(fields.bronze)}];
   return [`${base}/review/${action}`, fields];
 }
 
 const confirmations = {intake: '已建立借展档案', crate: '已保存检查记录', setup: '已登记展厅布置',
-  triage: '已提交风险分流', witness: '已签署开箱见证', decision: '已记录主管决定', sample: '封签抽检通过', reopen: '已重开复核'};
+  triage: '已提交风险分流', witness: '已签署开箱见证', decision: '已记录主管决定', sample: '封签抽检通过', reopen: '已重开复核',
+  thresholds: '已提交阈值试算'};
 
 app.addEventListener('submit', async (event) => {
   const form = event.target;
@@ -143,6 +151,15 @@ app.addEventListener('click', async (event) => {
     try {
       await authed(`/loans/${store.record.id}/dispatch`, {method: 'POST'});
       tell('派车已确认，借展档案已封存');
+      await render();
+    } catch (err) { tell(err.message, true); }
+    finally { button.disabled = false; }
+  }
+  if (button.dataset.publish) {
+    button.disabled = true;
+    try {
+      await authed(`/thresholds/trials/${button.dataset.publish}/publish`, {method: 'POST'});
+      tell('新阈值已发布，新入队批次生效');
       await render();
     } catch (err) { tell(err.message, true); }
     finally { button.disabled = false; }

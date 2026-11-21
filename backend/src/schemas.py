@@ -116,3 +116,9 @@ class SampleObservation(BaseModel):
 
 class ReopenReview(BaseModel):
     reason: Reason
+
+
+class ThresholdProposal(BaseModel):
+    porcelain: float = Field(ge=0.05, le=0.95)
+    paper: float = Field(ge=0.05, le=0.95)
+    bronze: float = Field(ge=0.05, le=0.95)

@@ -139,6 +139,24 @@ textarea { min-height: 80px; resize: vertical; }
 .signoffs h3 { font-size: 15px; }
 .signoffs p { margin-top: 3px; }
 .review-sheet label + label { margin-top: 9px; }
+.threshold-board { margin-top: 30px; border-top: 3px solid var(--rust); padding-top: 16px; }
+.threshold-board > h2 { font-size: 21px; margin-bottom: 14px; }
+.threshold-workbench { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 22px; align-items: start; }
+.threshold-current, .threshold-trial, .threshold-proposal { background: var(--paper); border: 1px solid var(--rule); padding: 16px 18px; }
+.threshold-trial, .threshold-proposal { grid-column: 2; }
+.threshold-current { grid-row: span 2; }
+.threshold-proposal { margin-top: 0; }
+.threshold-workbench .muted { margin: 7px 0; font-size: 12px; }
+.threshold-workbench .fingerprint { font-size: 11px; color: var(--muted); margin-top: 10px; }
+.metric-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+.metric-table th, .metric-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); }
+.metric-table th { color: var(--muted); font-size: 11px; font-weight: 600; }
+.metric-table td.mono { text-align: right; }
+.metric-table tfoot td { font-weight: 700; border-bottom: 0; }
+@media (max-width: 767px) {
+  .threshold-workbench { grid-template-columns: 1fr; }
+  .threshold-trial, .threshold-proposal, .threshold-current { grid-column: auto; grid-row: auto; }
+}
 dialog { width: min(560px, calc(100% - 30px)); background: var(--paper); border: 1px solid var(--rule); border-top: 4px solid var(--rust); color: var(--ink); padding: 23px; }
 dialog::backdrop { background: oklch(26% .031 55 / .42); }
 .notice { position: fixed; z-index: 1; bottom: 20px; right: 20px; max-width: calc(100vw - 40px); background: var(--pine); color: var(--paper); padding: 10px 16px; border-radius: 3px; }

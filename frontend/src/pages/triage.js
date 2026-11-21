@@ -1,6 +1,7 @@
 import {fileIndex, heading, recordHeader, stamp} from '../components.js';
 import {materials, packings, routes} from '../constants.js';
 import {dateTime, escape as e, percent} from '../format.js';
+import {thresholdPanel} from './thresholds.js';
 
 function riskResult(result) {
   const evidence = result.evidence;
@@ -24,12 +25,12 @@ function riskResult(result) {
         `<dt>${e(label)}</dt><dd>${value.toFixed(4)}</dd>`).join('')}</dl><p class="fingerprint mono">${e(evidence.input_sha256)}</p></details></section>`;
 }
 
-export function triagePage({loans, record, staff}) {
+export function triagePage({loans, record, staff, thresholds}) {
   const result = record?.triage;
   return `${heading('风险分流', '以包装快照确定是否安排开箱复核')}
     <div class="workbench">${fileIndex(loans, record, 'triage')}${record ? `<article class="dossier">${recordHeader(record)}
     ${result?.status === 'scored' ? riskResult(result) : `<section class="triage-intake"><h3>${result?.status === 'queued' ? '风险分流排队中' : '提交包装记录'}</h3>
       <p>${e(result?.error ?? (result?.status === 'queued' ? '模型完成后，本页会更新判定与复核任务。' : '先完成包装检查，再将材质、包装、路线、湿度与转运次数归档计算。'))}</p>
       ${staff.role === 'operator' && record.crate && result?.status !== 'queued' ? `<form data-action="triage"><button>${result?.status === 'failed' ? '重试分流' : '提交风险分流'}</button></form>` : ''}</section>`}
-    </article>` : ''}</div>`;
+    </article>` : ''}</div>${thresholdPanel({staff, thresholds})}`;
 }
